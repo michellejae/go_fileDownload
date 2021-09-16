@@ -1,11 +1,11 @@
 
-- need to figure out how to do a range request grabbing each specific range 
-    for example if my file is 100 bytes .. my first go routine will be 0-25, next one 26-30, and so on
+### issues
+- md5 / etag does not match 
+- it's taking a hella long time to download and write new file .. not sure if i have code written correctly.
+    - wonder if i shouldn't be writing to file inside the for loop from channel?
+- 
 
-- the above will be in go routines
-- then need to save each specified chunk i download to a new file in order
-- finally compared ETag signature
+### todo    
+- need to reorganize code to make it cmd / library or something
 
-- need to reorganize code
-- add context timeout
 

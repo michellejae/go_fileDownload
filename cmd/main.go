@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,15 +13,14 @@ import (
 )
 
 type deets struct {
-	i      int
 	offset int64
-	limit  int64
+	body   []byte
 }
 
 var URL = "https://storage.googleapis.com/covid19-open-data/v2/epidemiology.csv"
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err := initialPing(ctx)
@@ -30,7 +31,7 @@ func main() {
 }
 
 func initialPing(ctx context.Context) error {
-	ch := make(chan deets)
+
 	// just send header request to URL
 	req, err := http.NewRequestWithContext(ctx, "HEAD", URL, nil)
 	if err != nil {
@@ -42,24 +43,39 @@ func initialPing(ctx context.Context) error {
 		log.Fatalf("head request error: %v", err)
 	}
 	// get content length and eTag
-
 	contentLength := res.ContentLength
 
 	//contentLength = int64(105)
-	//	etag := res.Header.Get("Etag")
+	etag := res.Header.Get("Etag")
+	fmt.Printf("etag %v \n", etag)
 	// length of every file chunk we will want to download
 	sectionLength := contentLength / 3
 
 	if res.StatusCode != http.StatusOK {
 		log.Fatal(res.Status)
 	}
-	// need an index to send through
-	i := 0
+
+	sum, err := createEmptyFile(ctx, "./test2.txt", contentLength, sectionLength)
+	if err != nil {
+		fmt.Println("wherejfdsjl", err)
+	}
+
+	fmt.Printf("%x", sum)
+	return nil
+
+}
+
+func createEmptyFile(ctx context.Context, path string, contentLength, sectionLength int64) ([]byte, error) {
+	ch := make(chan deets)
+	file, err := os.Create(path)
+	if err != nil {
+		fmt.Printf("error opening file %v", err)
+	}
+	defer file.Close()
+
 	// loop through the content length; but jump by every sectoin length
 	// ie if contentlength is 105, and our section length is 26 (100/4) we would += 26 each time
 	for offset := int64(0); offset < contentLength; offset += sectionLength {
-		fmt.Println("here")
-		i++
 		offset := offset
 		// limit will be our 'high' each time cause it's our min
 		limit := offset + sectionLength
@@ -69,27 +85,32 @@ func initialPing(ctx context.Context) error {
 		if limit > contentLength {
 			limit = contentLength
 		}
-		go func(ctx context.Context, url string, offset, limit int64, i int) {
-			downloadFile(ctx, URL, offset, limit, i)
-			ch <- test{i, limit}
+		// make call to download the file bits at a time in parrellel
+		go func(ctx context.Context, url string, offset, limit int64) {
+			body := downloadFile(ctx, URL, offset, limit)
+			ch <- deets{offset, body}
 
-		}(ctx, URL, offset, limit, i)
+		}(ctx, URL, offset, limit)
 
 	}
-	// for j := 0; j < i; j++ {
-	// 	result := <-ch
-	// 	fmt.Println("RESULT", result)
-	// }
+	// loop back through the same stuff so i can receive channel
 	for off := int64(0); off < contentLength; off += sectionLength {
 		result := <-ch
-		fmt.Println("RESULT", result)
+		// find correct spot in file
+		file.Seek(result.offset, 0)
+		// obviously write to the file
+		file.Write(result.body)
 	}
+	h := md5.New()
+	if _, err := io.Copy(h, file); err != nil {
+		log.Fatal(err)
+	}
+	sum := h.Sum(nil)
 
-	return nil
-
+	return sum, nil
 }
 
-func downloadFile(ctx context.Context, url string, offset int64, limit int64, i int) {
+func downloadFile(ctx context.Context, url string, offset int64, limit int64) []byte {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", URL, nil)
 	if err != nil {
@@ -109,43 +130,9 @@ func downloadFile(ctx context.Context, url string, offset int64, limit int64, i 
 	if res.StatusCode != http.StatusPartialContent {
 		log.Fatalf(res.Status)
 	}
-
-	//limitedReader := &io.LimitedReader{R: res.Body, 1_000_000}
-	//	body, err := ioutil.ReadAll(io.LimitReader(res.Body, size))
-	// if err != nil {
-	// 	log.Fatalf("body limit error: %v", err)
-	// }
-
+	// reads res.body and converts in bytes
 	body, err := ioutil.ReadAll(res.Body)
 
-	fmt.Println(body)
+	return body
 
-	createEmptyFile("./test.txt", offset, body)
-
-	// fmt.Println(text)
-
-}
-
-func createEmptyFile(path string, offset int64, body []byte) error {
-	fmt.Println("hello poppit")
-	file, err := os.OpenFile(path, os.O_CREATE, 0755)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	file.Seek(offset, 0)
-
-	os.WriteFile(path, body, 0666)
-	return nil
-}
-
-func createEmptyFile(path string, size int64) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	file.Seek(size-1, os.SEEK_SET)
-	file.Write([]byte{0})
-	return nil
 }
