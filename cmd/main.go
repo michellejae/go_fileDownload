@@ -45,7 +45,7 @@ func initialPing(ctx context.Context) error {
 	// get content length and eTag
 	contentLength := res.ContentLength
 
-	//contentLength = int64(105)
+	//contentLength = int64(1105)
 	etag := res.Header.Get("Etag")
 	fmt.Printf("etag %v \n", etag)
 	// length of every file chunk we will want to download
@@ -74,10 +74,10 @@ func createEmptyFile(ctx context.Context, path string, contentLength, sectionLen
 	defer file.Close()
 
 	// loop through the content length; but jump by every sectoin length
-	// ie if contentlength is 105, and our section length is 26 (100/4) we would += 26 each time
+	// ie if contentlength is 105, and our section length is 26 (105/4) we would += 26 each time
 	for offset := int64(0); offset < contentLength; offset += sectionLength {
-		offset := offset
-		// limit will be our 'high' each time cause it's our min
+		//offset := offset
+		// limit will be our 'high' each time
 		limit := offset + sectionLength
 		// because we do not have an even sectionLengt, eventually our limit will go over contentlength
 		// so if limits are 0, 26, 52, 78, 104 .. we still have no hit 105 our conentlegnth so we would loop
