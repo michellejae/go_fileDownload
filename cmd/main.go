@@ -5,11 +5,12 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/michellejae/filedownload/downloadfile"
 )
 
 type deets struct {
@@ -87,7 +88,7 @@ func createEmptyFile(ctx context.Context, path string, contentLength, sectionLen
 		}
 		// make call to download the file bits at a time in parrellel
 		go func(ctx context.Context, url string, offset, limit int64) {
-			body := downloadFile(ctx, URL, offset, limit)
+			body := downloadfile.Download(ctx, URL, offset, limit)
 			ch <- deets{offset, body}
 
 		}(ctx, URL, offset, limit)
@@ -108,31 +109,4 @@ func createEmptyFile(ctx context.Context, path string, contentLength, sectionLen
 	sum := h.Sum(nil)
 
 	return sum, nil
-}
-
-func downloadFile(ctx context.Context, url string, offset int64, limit int64) []byte {
-
-	req, err := http.NewRequestWithContext(ctx, "GET", URL, nil)
-	if err != nil {
-		log.Fatalf("new request error: %v", err)
-	}
-
-	// need to set our range header so we are only downloading a portion of the file
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, limit))
-	// fire off request
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatalf("response error: %v", err)
-	}
-	// have to defer body.close so not memeory leak
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusPartialContent {
-		log.Fatalf(res.Status)
-	}
-	// reads res.body and converts in bytes
-	body, err := ioutil.ReadAll(res.Body)
-
-	return body
-
 }
